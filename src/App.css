@@ -1,0 +1,113 @@
+/* Typography — fonts loaded via <link> in index.html for faster, more reliable loading */
+
+body {
+  font-family: 'EB Garamond', Georgia, serif;
+}
+
+/* Subtle warm paper-grain texture overlay on the whole app */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.40 0 0 0 0 0.25 0 0 0 0.18 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Brand wordmark + section headings — display serif w/ letterpress shadow */
+.brand,
+.display-heading {
+  font-family: 'Cinzel', 'EB Garamond', Georgia, serif !important;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 0 1px rgba(0, 0, 0, 0.4);
+  letter-spacing: 3px;
+}
+
+/* Pressed-in look on every gold-styled element */
+[style*="color: rgb(194, 155, 97)"],
+[style*="color:#c29b61"] {
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* Planner layout */
+.planner-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 30px;
+  align-items: start;
+}
+
+.terrain-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.sleep-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.pack-type-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+/* Sticky featured panel on desktop only */
+.featured-panel {
+  border: 1px solid #4a3728;
+  padding: 20px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.27);
+  position: sticky;
+  top: 20px;
+}
+
+/* Focus-visible rings on every interactive surface */
+button:focus-visible,
+[role="radio"]:focus-visible,
+[role="tab"]:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid #c29b61;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Mobile — stack vertically, panel BELOW picker */
+@media (max-width: 900px) {
+  .planner-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .featured-panel {
+    position: static !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .terrain-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .sleep-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .pack-type-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .header-bar {
+    flex-direction: column !important;
+    gap: 4px !important;
+    padding: 16px !important;
+  }
+  .header-bar .brand {
+    font-size: 1.4rem !important;
+  }
+  .header-bar .tagline {
+    font-size: 0.7rem !important;
+  }
+}
