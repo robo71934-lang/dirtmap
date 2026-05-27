@@ -755,13 +755,13 @@ const SavedDrawer = ({ savedTrails, onUnsave, onGoToMap, onClose }) => {
     <>
       {/* backdrop */}
       <div onClick={onClose} style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100,
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000,
       }} />
       {/* panel */}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, width: '340px',
         background: T.leather, borderLeft: '1px solid ' + T.border,
-        boxShadow: '-8px 0 32px rgba(0,0,0,0.5)', zIndex: 101,
+        boxShadow: '-8px 0 32px rgba(0,0,0,0.5)', zIndex: 2001,
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         {/* header */}
@@ -936,6 +936,7 @@ const SPOT_FILTERS = [['all','All Spots'], ['iconic','Iconic'], ['known','Popula
 
 const SpotCard = ({ sp, isOpen, onClick, savedTrails = {}, onSaveTrail = () => {}, onGoToMap = () => {} }) => {
   const [hovered, setHovered] = useState(false);
+  const [activeTrailIdx, setActiveTrailIdx] = useState(null);
   const stargazeObj = STARGAZING_LEVELS.find(x => x.val === sp.stargaze);
   const photo = sp.img || sp.terrainImg || '';
   const transform = isOpen ? 'translateY(-2px) scale(1.01)' : hovered ? 'translateY(-2px) scale(1.005)' : 'translateY(0)';
@@ -1050,14 +1051,15 @@ const SpotCard = ({ sp, isOpen, onClick, savedTrails = {}, onSaveTrail = () => {
           {sp.trails.map((tr, ti) => {
             // Mock rating until real reviews land — deterministic so it doesn't flicker
             const rating = (4 + ((tr.name.length * 7) % 10) / 10).toFixed(1);
+            const isTrailActive = activeTrailIdx === ti;
             return (
-              <div key={ti} style={{
+              <div key={ti} onClick={() => setActiveTrailIdx(isTrailActive ? null : ti)} style={{
                 padding: '12px 14px', background: T.leatherDark, borderRadius: '12px',
-                marginBottom: '10px', border: '1px solid ' + T.border,
-                transition: 'border-color 200ms ease, transform 200ms ease',
+                marginBottom: '10px', border: '1px solid ' + (isTrailActive ? T.gold : T.border),
+                transition: 'border-color 200ms ease, transform 200ms ease', cursor: 'pointer',
               }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = T.gold; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.transform = 'translateY(0)'; }}>
+                onMouseLeave={e => { e.currentTarget.style.borderColor = isTrailActive ? T.gold : T.border; e.currentTarget.style.transform = 'translateY(0)'; }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px', gap: '8px' }}>
                   <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem', lineHeight: 1.3, fontFamily: 'Georgia, serif' }}>{tr.name}</div>
                   {(() => {
@@ -1085,6 +1087,25 @@ const SpotCard = ({ sp, isOpen, onClick, savedTrails = {}, onSaveTrail = () => {
                   <span style={{ color: T.muted }}>{tr.type}</span>
                 </div>
                 <div style={{ fontSize: '0.75rem', color: T.muted, fontStyle: 'italic', lineHeight: 1.5 }}>{tr.notes}</div>
+                {isTrailActive && sp.lat && sp.lng && (
+                  <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', border: '1px solid ' + T.border }}>
+                    <img
+                      src={`https://server.arcgisonline.com/arcgis/rest/services/World_Topo_Map/MapServer/export?bbox=${sp.lng-0.06},${sp.lat-0.04},${sp.lng+0.06},${sp.lat+0.04}&size=380,180&format=png&f=image`}
+                      alt={`Map of ${sp.name}`}
+                      style={{ width: '100%', display: 'block' }}
+                    />
+                    <div style={{ padding: '8px 10px', background: T.nightCamp, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', color: T.muted, fontStyle: 'italic' }}>
+                        {tr.dist} · {tr.type}
+                      </span>
+                      <button type="button"
+                        onClick={(e) => { e.stopPropagation(); onGoToMap(sp); }}
+                        style={{ ...BUTTON_RESET, width: 'auto', fontSize: '0.7rem', color: T.gold, fontFamily: 'Georgia, serif' }}>
+                        ⌖ Full map →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1352,7 +1373,6 @@ const PlannerTab = ({ region, setRegion, terrainId, setTerrainId, sleepId, setSl
                       setTerrainId(TERRAINS[r][0].id);
                       setSleepId(null);
                       setOpenSpotId(null);
-                      requestAnimationFrame(() => scrollTo(terrainRef));
                     }}
                     className="region-btn"
                     style={{
@@ -1386,7 +1406,6 @@ const PlannerTab = ({ region, setRegion, terrainId, setTerrainId, sleepId, setSl
                       setTerrainId(t.id);
                       setSleepId(null);
                       setOpenSpotId(null);
-                      requestAnimationFrame(() => scrollTo(sleepRef));
                     }}
                     className="terrain-card"
                     style={{
@@ -1426,7 +1445,6 @@ const PlannerTab = ({ region, setRegion, terrainId, setTerrainId, sleepId, setSl
                     aria-label={s.name + ', ' + fit.label + '. ' + fit.why}
                     onClick={() => {
                       setSleepId(s.id);
-                      requestAnimationFrame(() => scrollTo(spotsRef));
                     }}
                     className="sleep-card"
                     style={{

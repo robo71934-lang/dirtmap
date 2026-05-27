@@ -265,10 +265,22 @@ export default function MapTab({ spots: allSpots = [], savedTrails = {}, onSaveT
             key={i}
             position={[sp.lat, sp.lng]}
             icon={makeIcon(sp, selectedSpot === sp)}
-            eventHandlers={{ click: () => setSelectedSpot(prev => prev === sp ? null : sp) }}
+            eventHandlers={{ click: () => { setSelectedSpot(prev => prev === sp ? null : sp); setSelectedTrail(null); } }}
             zIndexOffset={selectedSpot === sp ? 1000 : 0}
           />
         ))}
+
+        {/* Trail radius circle */}
+        {selectedSpot && selectedTrail && (
+          <Circle
+            center={[selectedSpot.lat, selectedSpot.lng]}
+            radius={parseMeters(selectedTrail.dist)}
+            pathOptions={{
+              color: T.gold, fillColor: T.gold, fillOpacity: 0.07,
+              dashArray: '7 5', weight: 2,
+            }}
+          />
+        )}
       </MapContainer>
 
       {/* SPOT SIDEBAR */}
@@ -353,14 +365,18 @@ export default function MapTab({ spots: allSpots = [], savedTrails = {}, onSaveT
               const trailKey = selectedSpot.name + '||' + tr.name;
               const isSaved  = !!savedTrails[trailKey];
               const rating   = (4 + ((tr.name.length * 7) % 10) / 10).toFixed(1);
+              const isActive = selectedTrail?.name === tr.name;
               return (
-                <div key={ti} style={{ padding: '10px 12px', background: T.leatherDark,
-                  borderRadius: '10px', marginBottom: '8px', border: '1px solid ' + T.border }}>
+                <div key={ti} onClick={() => setSelectedTrail(isActive ? null : tr)}
+                  style={{ padding: '10px 12px', background: isActive ? T.leatherDark + 'ee' : T.leatherDark,
+                    borderRadius: '10px', marginBottom: '8px', cursor: 'pointer',
+                    border: '1px solid ' + (isActive ? T.gold : T.border),
+                    transition: 'border-color 150ms', }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px', gap: '6px' }}>
-                    <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.88rem', fontFamily: 'Georgia, serif', lineHeight: 1.3 }}>
+                    <div style={{ color: isActive ? T.gold : '#fff', fontWeight: 'bold', fontSize: '0.88rem', fontFamily: 'Georgia, serif', lineHeight: 1.3, transition: 'color 150ms' }}>
                       {tr.name}
                     </div>
-                    <button type="button" onClick={() => onSaveTrail(trailKey)}
+                    <button type="button" onClick={(e) => { e.stopPropagation(); onSaveTrail(trailKey); }}
                       style={{ ...BUTTON_RESET, width: 'auto', color: isSaved ? T.star : T.muted, fontSize: '1rem', padding: '0 2px', flexShrink: 0 }}>
                       {isSaved ? '♥' : '♡'}
                     </button>
@@ -372,6 +388,12 @@ export default function MapTab({ spots: allSpots = [], savedTrails = {}, onSaveT
                     <span style={{ color: T.muted }}>{tr.type}</span>
                   </div>
                   <div style={{ fontSize: '0.7rem', color: T.muted, fontStyle: 'italic' }}>{tr.notes}</div>
+                  {isActive && (
+                    <div style={{ marginTop: '8px', fontSize: '0.68rem', color: T.gold, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span>◎</span>
+                      <span>Showing trail radius on map · {tr.dist}</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
