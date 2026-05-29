@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './App.css';
 import MapTab from './MapTab.jsx';
+import CommunityTab from './CommunityTab.jsx';
 
 // =============================================================================
 // THEME + STATIC LOOKUPS  (unchanged from baseline)
@@ -104,6 +105,73 @@ const SLEEP_STYLES = [
     pros: ['Full comfort','No gear needed','Great for groups'], cons: ['Most expensive','Less immersive','Books fast'],
     good: ['mountain','lake','redwood','beach'], bad: ['dispersed','volcanic','lostcoast'] },
 ];
+
+// Maps each sleep style to which shelter/sleep items are relevant, skip-able, or need a note
+const SLEEP_PACK_MAP = {
+  tent:    {
+    label: 'Tent', icon: '⛺',
+    note: 'Full tent setup. Footprint and repair kit are worth the weight on multi-night.',
+    needed: ['Tent or hammock', 'Tent footprint', 'Tent repair kit'],
+    skip:   ['Tarp backup'],
+    sleepSkip: [],
+  },
+  hammock: {
+    label: 'Hammock', icon: '🌿',
+    note: 'Swap freestanding tent for hammock. Add an underquilt if temps drop below 50°F — hammocks are cold underneath.',
+    needed: ['Tent or hammock', 'Tarp backup'],
+    skip:   ['Tent footprint', 'Tent repair kit'],
+    sleepSkip: [],
+  },
+  car:     {
+    label: 'Car Camping', icon: '🚗',
+    note: 'You\'re sleeping in or beside your car — skip the backpacking shelter entirely. Weight limits don\'t apply.',
+    needed: [],
+    skip:   ['Tent or hammock', 'Tent footprint', 'Tarp backup', 'Tent repair kit'],
+    sleepSkip: [],
+  },
+  rooftop: {
+    label: 'Rooftop Tent', icon: '🚙',
+    note: 'Your RTT is the shelter. Leave the freestanding tent at home.',
+    needed: [],
+    skip:   ['Tent or hammock', 'Tent footprint', 'Tarp backup', 'Tent repair kit'],
+    sleepSkip: [],
+  },
+  bivy:    {
+    label: 'Bivy Sack', icon: '🪨',
+    note: 'Bivy + tarp is a classic ultralight combo. The tarp handles rain — the bivy handles condensation and bugs.',
+    needed: ['Tarp backup'],
+    skip:   ['Tent or hammock', 'Tent footprint', 'Tent repair kit'],
+    sleepSkip: [],
+  },
+  cowboy:  {
+    label: 'Cowboy Camp', icon: '🌙',
+    note: 'Nothing above you but stars. Skip all shelter. Sleeping pad insulation matters even more on the bare ground.',
+    needed: [],
+    skip:   ['Tent or hammock', 'Tent footprint', 'Tarp backup', 'Tent repair kit'],
+    sleepSkip: [],
+  },
+  van:     {
+    label: 'Van / Overland', icon: '🚐',
+    note: 'The van is the shelter. Skip tent, footprint, and tarp — use that weight budget for comfort or extra food.',
+    needed: [],
+    skip:   ['Tent or hammock', 'Tent footprint', 'Tarp backup', 'Tent repair kit'],
+    sleepSkip: [],
+  },
+  tarp:    {
+    label: 'Tarp', icon: '🏕',
+    note: 'Tarp as primary shelter — pair with a bivy or bug net for insect protection. Skill-intensive but very light.',
+    needed: ['Tarp backup'],
+    skip:   ['Tent or hammock', 'Tent footprint', 'Tent repair kit'],
+    sleepSkip: [],
+  },
+  cabin:   {
+    label: 'Cabin / Glamp', icon: '🏡',
+    note: 'Furnished lodging — sleeping bag, pad, and all shelter gear stays home. Just bring your personal kit.',
+    needed: [],
+    skip:   ['Tent or hammock', 'Tent footprint', 'Tarp backup', 'Tent repair kit'],
+    sleepSkip: ['Sleeping bag', 'Sleeping pad', 'Camp pillow', 'Ear plugs'],
+  },
+};
 
 const SEASONAL = {
   desert:    { months: [2,3,3,3,2,1,0,0,1,2,3,3], notes: { best: 'Oct-Apr', avoid: 'Jun-Aug (100F+)', bugs: 'Minimal year-round', crowds: 'Spring weekends peak' } },
@@ -523,148 +591,269 @@ const ALL_SPOTS_GLOBAL = (() => {
 // =============================================================================
 function getDayCats() { return [
   { name: 'Water', items: [
-    { t: 'Water 2L minimum', n: '1L/hr in desert heat' },
-    { t: 'Filter or purification tabs', n: 'Sawyer Squeeze' },
-    { t: 'Electrolyte packets', n: 'Nuun or Liquid IV' }
+    { t: 'Water 2L minimum', n: '1L/hr in desert heat', oz: 72 },
+    { t: 'Filter or purification tabs', n: 'Sawyer Squeeze', oz: 3 },
+    { t: 'Electrolyte packets', n: 'Nuun or Liquid IV', oz: 1 }
   ]},
   { name: 'Food', items: [
-    { t: 'Trail snacks', n: '~200 cal/hr hiking' },
-    { t: 'Lunch', n: 'No cooking needed' },
-    { t: 'Emergency bar', n: 'Clif bar at bottom' }
+    { t: 'Trail snacks', n: '~200 cal/hr hiking', oz: 8 },
+    { t: 'Lunch', n: 'No cooking needed', oz: 8 },
+    { t: 'Emergency bar', n: 'Clif bar at bottom', oz: 2 }
   ]},
   { name: 'Navigation', items: [
-    { t: 'Offline map', n: 'AllTrails or Gaia GPS downloaded' },
-    { t: 'Paper trail map', n: 'Backup always' },
-    { t: 'Compass', n: 'Know how to use it' }
+    { t: 'Offline map', n: 'AllTrails or Gaia GPS downloaded', oz: 0 },
+    { t: 'Paper trail map', n: 'Backup always', oz: 1 },
+    { t: 'Compass', n: 'Know how to use it', oz: 2 }
   ]},
   { name: 'Safety', items: [
-    { t: 'Basic first aid kit', n: 'Blister pads, gauze, tape' },
-    { t: 'Whistle', n: '3 blasts = emergency' },
-    { t: 'Headlamp + batteries', n: 'Even on day hikes' },
-    { t: 'Mylar emergency blanket', n: 'Weighs nothing' },
-    { t: 'Phone or PLB', n: 'Garmin inReach for remote' }
+    { t: 'Basic first aid kit', n: 'Blister pads, gauze, tape', oz: 4 },
+    { t: 'Whistle', n: '3 blasts = emergency', oz: 1 },
+    { t: 'Headlamp + batteries', n: 'Even on day hikes', oz: 4 },
+    { t: 'Mylar emergency blanket', n: 'Weighs nothing', oz: 1 },
+    { t: 'Phone or PLB', n: 'Garmin inReach for remote', oz: 6 }
   ]},
   { name: 'Sun & Clothing', items: [
-    { t: 'Moisture-wicking base layer', n: 'No cotton' },
-    { t: 'Sunscreen SPF 50+', n: 'Reapply every 2 hrs' },
-    { t: 'Sun hat', n: 'Non-negotiable in SoCal' },
-    { t: 'Wind/rain layer', n: 'Weather changes fast' },
-    { t: 'Sunglasses', n: 'UV-rated' }
+    { t: 'Moisture-wicking base layer', n: 'No cotton', oz: 6 },
+    { t: 'Sunscreen SPF 50+', n: 'Reapply every 2 hrs', oz: 3 },
+    { t: 'Sun hat', n: 'Non-negotiable in SoCal', oz: 3 },
+    { t: 'Wind/rain layer', n: 'Weather changes fast', oz: 10 },
+    { t: 'Sunglasses', n: 'UV-rated', oz: 1 }
   ]},
   { name: 'Footwear', items: [
-    { t: 'Trail runners or boots', n: 'Ankle support on rocky terrain' },
-    { t: 'Wicking socks x2', n: 'Darn Tough or Smartwool' },
-    { t: 'Trekking poles', n: 'Saves knees on descent' }
+    { t: 'Trail runners or boots', n: 'Ankle support on rocky terrain', oz: 24 },
+    { t: 'Wicking socks x2', n: 'Darn Tough or Smartwool', oz: 4 },
+    { t: 'Trekking poles', n: 'Saves knees on descent', oz: 16 }
   ]}
 ];}
 function getOvernightCats() { return [
   { name: 'Shelter', items: [
-    { t: 'Tent or hammock', n: 'Check weather first' },
-    { t: 'Tent footprint', n: 'Protects floor' },
-    { t: 'Tarp backup', n: 'Cheap insurance' },
-    { t: 'Tent repair kit', n: 'Seam sealer + pole sleeve' }
+    { t: 'Tent or hammock', n: 'Check weather first', oz: 52 },
+    { t: 'Tent footprint', n: 'Protects floor', oz: 8 },
+    { t: 'Tarp backup', n: 'Cheap insurance', oz: 10 },
+    { t: 'Tent repair kit', n: 'Seam sealer + pole sleeve', oz: 2 }
   ]},
   { name: 'Sleep System', items: [
-    { t: 'Sleeping bag', n: 'Rated 10F below expected low' },
-    { t: 'Sleeping pad', n: 'R-2+ SoCal, R-4+ NorCal' },
-    { t: 'Camp pillow', n: 'Compressible' },
-    { t: 'Ear plugs', n: 'Animals, wind, snorers' }
+    { t: 'Sleeping bag', n: 'Rated 10°F below expected low', oz: 28 },
+    { t: 'Sleeping pad', n: 'R-2+ SoCal, R-4+ NorCal — pad matters MORE than bag', oz: 16 },
+    { t: 'Camp pillow', n: 'Compressible', oz: 3 },
+    { t: 'Ear plugs', n: 'Animals, wind, snorers', oz: 0 }
   ]},
   { name: 'Water', items: [
-    { t: '3L carry capacity', n: '' },
-    { t: 'Water filter', n: 'Sawyer Squeeze or BeFree' },
-    { t: 'Backup purification tabs', n: '' },
-    { t: 'Electrolyte mix', n: 'Daily' }
+    { t: '3L carry capacity', n: '', oz: 4 },
+    { t: 'Water filter', n: 'Sawyer Squeeze or BeFree', oz: 3 },
+    { t: 'Backup purification tabs', n: '', oz: 1 },
+    { t: 'Electrolyte mix', n: 'Daily', oz: 2 }
   ]},
   { name: 'Food & Cooking', items: [
-    { t: 'Camp stove + fuel', n: 'JetBoil Flash is fast' },
-    { t: 'Titanium pot', n: 'Doubles as bowl' },
-    { t: 'Spork', n: '' },
-    { t: 'Freeze-dried meals', n: '2 per night' },
-    { t: 'Instant coffee', n: 'Morning ritual matters' },
-    { t: 'Bear canister', n: 'Required in many CA areas' }
+    { t: 'Camp stove + fuel', n: 'JetBoil Flash is fast', oz: 14 },
+    { t: 'Titanium pot', n: 'Doubles as bowl', oz: 3 },
+    { t: 'Spork', n: '', oz: 1 },
+    { t: 'Freeze-dried meals', n: '~5oz each, plan 2 per night', oz: 10 },
+    { t: 'Instant coffee', n: 'Morning ritual matters', oz: 1 },
+    { t: 'Bear canister', n: 'Required Yosemite, Kings Canyon, Desolation', oz: 33, warn: 'heavy', swap: 'Ursack Major — 7.6oz, allowed most CA wilderness' }
   ]},
   { name: 'Navigation', items: [
-    { t: 'Gaia GPS downloaded', n: '' },
-    { t: 'Paper topo map', n: '' },
-    { t: 'Compass', n: '' },
-    { t: 'Satellite communicator', n: 'Garmin inReach' }
+    { t: 'Gaia GPS downloaded', n: '', oz: 0 },
+    { t: 'Paper topo map', n: '', oz: 1 },
+    { t: 'Compass', n: '', oz: 2 },
+    { t: 'Satellite communicator', n: 'Garmin inReach', oz: 4 }
   ]},
   { name: 'Safety', items: [
-    { t: 'Full first aid kit', n: 'Leukotape, SAM splint' },
-    { t: 'Headlamp x2', n: 'Plus spare batteries' },
-    { t: 'Fire starter + lighter + matches', n: 'Triple redundancy' },
-    { t: 'Bear spray', n: 'NorCal especially' },
-    { t: 'Multi-tool', n: '' },
-    { t: 'Duct tape small roll', n: '' },
-    { t: 'Personal meds', n: 'Ibuprofen, antihistamine, Pepto' }
+    { t: 'Full first aid kit', n: 'Leukotape, SAM splint', oz: 8 },
+    { t: 'Headlamp x2', n: 'Plus spare batteries', oz: 6 },
+    { t: 'Fire starter + lighter + matches', n: 'Triple redundancy', oz: 4 },
+    { t: 'Bear spray', n: 'NorCal especially', oz: 9 },
+    { t: 'Multi-tool', n: '', oz: 6 },
+    { t: 'Duct tape small roll', n: '', oz: 3 },
+    { t: 'Personal meds', n: 'Ibuprofen, antihistamine, Pepto', oz: 3 }
   ]},
   { name: 'Clothing', items: [
-    { t: 'Base layer x2', n: 'Moisture-wicking' },
-    { t: 'Insulating mid layer', n: 'Even summer nights get cold' },
-    { t: 'Rain jacket', n: '' },
-    { t: 'Hiking pants', n: '' },
-    { t: 'Camp pants', n: '' },
-    { t: 'Warm hat + gloves', n: '' },
-    { t: 'Merino socks x3', n: '' },
-    { t: 'Camp shoes', n: 'Crocs - feet need rest' }
+    { t: 'Base layer x2', n: 'Merino or synthetic ONLY — cotton kills in wet/cold', oz: 8 },
+    { t: 'Cotton base layer', n: '', oz: 8, warn: 'nobp', swap: 'Merino wool — regulates temp, stays warm when wet' },
+    { t: 'Insulating mid layer', n: 'Even summer nights get cold above 7,000ft', oz: 10 },
+    { t: 'Rain jacket', n: '', oz: 12 },
+    { t: 'Hiking pants', n: '', oz: 12 },
+    { t: 'Camp pants', n: '', oz: 10 },
+    { t: 'Warm hat + gloves', n: '', oz: 4 },
+    { t: 'Merino socks x3', n: 'Darn Tough or Smartwool', oz: 6 },
+    { t: 'Camp shoes', n: 'Crocs — feet need rest after miles', oz: 16, warn: 'heavy', swap: 'Flip flops — 5oz, your feet still rest' }
   ]},
   { name: 'Hygiene', items: [
-    { t: 'Trowel for cat holes', n: '6-8 in, 200ft from water' },
-    { t: 'Biodegradable TP', n: '' },
-    { t: 'Hand sanitizer', n: '' },
-    { t: 'Toothbrush + tooth tabs', n: '' },
-    { t: 'Camp towel', n: 'Packtowl Ultralite' },
-    { t: 'Bug spray', n: 'Picaridin' }
+    { t: 'Trowel for cat holes', n: '6-8 in, 200ft from water', oz: 3 },
+    { t: 'Biodegradable TP', n: '', oz: 2 },
+    { t: 'Hand sanitizer', n: '', oz: 2 },
+    { t: 'Toothbrush + tooth tabs', n: '', oz: 1 },
+    { t: 'Camp towel', n: 'Packtowl Ultralite', oz: 3 },
+    { t: 'Bug spray', n: 'Picaridin', oz: 3 }
   ]},
   { name: 'Camp Extras', items: [
-    { t: 'Camp chair or sit pad', n: '' },
-    { t: 'Camp lantern', n: '' },
-    { t: 'Book or journal', n: '' },
-    { t: 'Battery bank', n: 'Anker 10k' },
-    { t: 'Dry bags', n: 'For electronics' },
-    { t: 'Fishing rod', n: 'Tenkara - ultralight' }
+    { t: 'Camp chair', n: 'Car camping only', oz: 48, warn: 'heavy', swap: 'Foam sit pad — 4oz, $12' },
+    { t: 'Sit pad', n: 'For backpacking', oz: 4 },
+    { t: 'Camp lantern', n: '', oz: 18, warn: 'heavy', swap: 'Headlamp on red mode — already in your kit' },
+    { t: 'Book or journal', n: '', oz: 8 },
+    { t: 'Battery bank', n: 'Anker 10k', oz: 7 },
+    { t: 'Dry bags', n: 'For electronics', oz: 2 },
+    { t: 'Fishing rod', n: 'Tenkara only — ultralight', oz: 10 }
   ]}
 ];}
 function getMultiCats() { return [
   ...getOvernightCats(),
   { name: 'Pack & Carry', items: [
-    { t: 'Backpack 50-65L', n: 'Osprey Atmos or Gregory Baltoro' },
-    { t: 'Pack rain cover', n: 'Or compactor bag liner' },
-    { t: 'Trekking poles', n: '25% less knee stress' },
-    { t: 'Pack liner', n: 'Trash compactor bag inside' }
+    { t: 'Backpack 50-65L', n: 'Osprey Atmos or Gregory Baltoro', oz: 64 },
+    { t: 'Pack rain cover', n: 'Or compactor bag liner', oz: 4 },
+    { t: 'Trekking poles', n: '25% less knee stress', oz: 16 },
+    { t: 'Pack liner', n: 'Trash compactor bag inside', oz: 2 }
   ]},
   { name: 'Extended Comms', items: [
-    { t: 'Trip plan with someone at home', n: 'Route + expected return' },
-    { t: 'Paper topo for full route', n: '' },
-    { t: 'Garmin inReach Mini 2', n: 'Two-way satellite' }
+    { t: 'Trip plan with someone at home', n: 'Route + expected return', oz: 0 },
+    { t: 'Paper topo for full route', n: '', oz: 2 },
+    { t: 'Garmin inReach Mini 2', n: 'Two-way satellite', oz: 4 }
   ]}
 ];}
 function getExtendedCats() { return [
   ...getMultiCats(),
   { name: 'Resupply Strategy', items: [
-    { t: 'Mail drop boxes', n: '~5 day food intervals' },
-    { t: 'Cash for trail towns', n: '$200+ per stop' },
-    { t: 'Card + ID waterproof pouch', n: '' }
+    { t: 'Mail drop boxes', n: '~5 day food intervals', oz: 0 },
+    { t: 'Cash for trail towns', n: '$200+ per stop', oz: 1 },
+    { t: 'Card + ID waterproof pouch', n: '', oz: 1 }
   ]},
   { name: 'Gear Durability', items: [
-    { t: 'Seam sealer pre-applied', n: '' },
-    { t: 'Shoe Goo', n: 'Boot sole repair' },
-    { t: 'Tenacious Tape', n: 'Fixes tents, jackets, packs' },
-    { t: 'Spare tent stakes x4', n: 'They bend and disappear' }
+    { t: 'Seam sealer pre-applied', n: '', oz: 2 },
+    { t: 'Shoe Goo', n: 'Boot sole repair', oz: 4 },
+    { t: 'Tenacious Tape', n: 'Fixes tents, jackets, packs', oz: 1 },
+    { t: 'Spare tent stakes x4', n: 'They bend and disappear', oz: 4 }
   ]},
   { name: 'Power Strategy', items: [
-    { t: 'Solar charger', n: 'BioLite or Anker' },
-    { t: 'Extra battery bank', n: '' },
-    { t: 'inReach subscription pre-paid', n: '' }
+    { t: 'Solar charger', n: 'BioLite or Anker', oz: 6 },
+    { t: 'Extra battery bank', n: '', oz: 7 },
+    { t: 'inReach subscription pre-paid', n: '', oz: 0 }
   ]}
 ];}
 
 const PACKING = {
-  day:       { label: 'Day Hike',           weight: '10-20 lbs', cats: getDayCats() },
-  overnight: { label: 'Overnight 1-2 nights', weight: '25-35 lbs', cats: getOvernightCats() },
-  multi:     { label: 'Multi-Day 3-5 nights', weight: '35-50 lbs', cats: getMultiCats() },
-  extended:  { label: 'Extended 6+ nights',   weight: '40-55 lbs', cats: getExtendedCats() },
+  day:       { label: 'Day Hike',           weight: '10-20 lbs', lbs: [10,20], cats: getDayCats() },
+  overnight: { label: 'Overnight 1-2 nights', weight: '25-35 lbs', lbs: [25,35], cats: getOvernightCats() },
+  multi:     { label: 'Multi-Day 3-5 nights', weight: '35-50 lbs', lbs: [35,50], cats: getMultiCats() },
+  extended:  { label: 'Extended 6+ nights',   weight: '40-55 lbs', lbs: [40,55], cats: getExtendedCats() },
+};
+
+const COMMUNITY_TIPS = {
+  'Shelter':       { tip: 'A cuben fiber tarp + bivy = under 1lb of shelter and handles 90% of CA conditions. Freestanding tents are comfort weight.', src: 'r/ultralight' },
+  'Sleep System':  { tip: 'Your sleeping pad R-value matters more than your bag temp rating. Cold ground steals heat 25x faster than cold air.', src: 'r/CampingandHiking' },
+  'Water':         { tip: 'Never carry more than 2L between sources on a mapped route. The Sawyer Squeeze weighs 3oz and lasts 100,000 gallons. Tabs as backup weigh nothing.', src: 'r/Ultralight' },
+  'Food & Cooking':{ tip: 'Cold soaking is the move for multi-day — a Talenti jar and Knorr sides = zero stove weight. For hot meals, alcohol stoves weigh under 1oz.', src: 'r/ultralight' },
+  'Navigation':    { tip: 'Download offline maps BEFORE you leave cell range. Gaia GPS is worth the subscription. A paper topo + compass never needs a charge.', src: 'r/Backcountry' },
+  'Safety':        { tip: 'A Garmin inReach Mini has literally saved lives. For any remote CA route — Lost Coast, Sierra, Marble Mountains — satellite comms are non-negotiable.', src: 'r/WildernessBackpacking' },
+  'Clothing':      { tip: '"Cotton kills" is real. Hypothermia risk spikes when wet cotton clings to skin. Merino stays warm even soaked. No exceptions for overnight+.', src: 'r/CampingandHiking' },
+  'Hygiene':       { tip: 'WAG bags for high-traffic peaks (Whitney, Half Dome). Pack out all TP even biodegradable — Desolation Wilderness rangers are finding TP piles everywhere.', src: 'r/WildernessBackpacking' },
+  'Camp Extras':   { tip: 'A foam sit pad (4oz, $12) replaces a camp chair (3lbs). A Kindle weighs less than one paperback. Ruthlessly audit luxury weight before any trip 3+ days.', src: 'r/ultralight' },
+  'Pack & Carry':  { tip: 'Target base weight (everything except food/water/fuel): under 10lbs for true UL, under 15lbs for lightweight. Your loaded pack should be max 20% of body weight.', src: 'r/ultralight' },
+  'Footwear':      { tip: 'Trail runners beat boots for 90% of Sierra Nevada terrain. 1lb on your feet feels like 5lbs on your back. Only go to boots for technical scrambling or heavy loads.', src: 'r/ultralight' },
+  'Sun & Clothing':{ tip: 'A sun hoody (UPF 50) is lighter than sunscreen + reapplying all day. Reapply sunscreen every 90 min anyway at altitude — UV radiation increases 10% per 1,000ft.', src: 'r/CampingandHiking' },
+};
+
+// =============================================================================
+// SEASONAL GEAR — dynamic add-ons + tip banner keyed to current month
+// Items appear inside their category when that category is open.
+// Checked state is namespaced separately so regular pack keys don't shift.
+// =============================================================================
+const getSeason = (month) => {
+  if ([11, 0, 1].includes(month)) return 'winter';
+  if ([2, 3, 4].includes(month)) return 'spring';
+  if ([5, 6, 7].includes(month)) return 'summer';
+  return 'fall';
+};
+
+const SEASONAL_GEAR = {
+  winter: {
+    label: 'Winter Conditions',
+    months: 'Dec – Feb',
+    icon: '❄',
+    color: '#7bbfdc',
+    tip: 'CA mountains can see 3ft of snow overnight above 6,000ft. Even SoCal gets freezing nights in the San Gabriels Dec–Feb. Plan for it or stay lower.',
+    adds: {
+      'Clothing':     [
+        { t: 'Microspikes', n: 'Essential on any trail above 5,000ft Dec–Mar — ice forms before snow does', seasonal: true },
+        { t: 'Balaclava', n: 'Wind chill in exposed passes can drop apparent temp 30°F', seasonal: true },
+      ],
+      'Sleep System': [
+        { t: 'Vapor barrier liner', n: 'Boosts bag warmth ~10°F and keeps insulation dry in wet cold', seasonal: true },
+      ],
+      'Safety': [
+        { t: 'Hand warmers ×4', n: 'Chemical backup if your hands go too numb mid-gear-swap', seasonal: true },
+        { t: 'Avalanche beacon', n: 'If you\'re going off-trail in the Sierra backcountry — non-negotiable', seasonal: true },
+      ],
+      'Shelter': [
+        { t: '4-season tent or bivy', n: 'Or a tarp + bivy rated for wind and snow load', seasonal: true },
+      ],
+    },
+  },
+  spring: {
+    label: 'Spring Conditions',
+    months: 'Mar – May',
+    icon: '🌧',
+    color: '#78b87a',
+    tip: 'NorCal rivers run dangerously fast April–June. Never cross moving water above the knee without a trekking pole plant and a line. Snow bridges collapse without warning.',
+    adds: {
+      'Water': [
+        { t: 'Trekking poles', n: 'Stream crossings are serious business in spring snowmelt — poles keep you upright', seasonal: true },
+      ],
+      'Clothing': [
+        { t: 'Bug head net', n: 'Mosquitoes emerge fast once snowmelt hits — Sierra peaks around late June', seasonal: true },
+        { t: 'Waterproof gaiters', n: 'Post-holing through soft spring snow soaks regular shoes instantly', seasonal: true },
+      ],
+      'Safety': [
+        { t: 'Emergency bivy sack', n: 'Spring temps swing 40°F+ between noon and midnight — always have a bail option', seasonal: true },
+      ],
+      'Shelter': [
+        { t: 'Extra guylines + stakes', n: 'Spring windstorms are vicious — a poorly staked tent is a kite', seasonal: true },
+      ],
+    },
+  },
+  summer: {
+    label: 'Summer Conditions',
+    months: 'Jun – Aug',
+    icon: '☀',
+    color: T.gold,
+    tip: 'Peak bear activity June–September — especially Yosemite, Kings Canyon, and Desolation Wilderness. Start early (5am), off ridges by noon — afternoon lightning builds daily above treeline.',
+    adds: {
+      'Water': [
+        { t: 'Electrolyte tabs or powder', n: 'Sweating 1L+/hr in desert heat = serious sodium loss, not just thirst', seasonal: true },
+        { t: 'Extra 1L water capacity', n: 'Desert sources dry up in summer — never assume the map is current', seasonal: true },
+      ],
+      'Sun & Clothing': [
+        { t: 'Sun hoody UPF 50+', n: 'Lighter and more effective than reapplying sunscreen all day at altitude', seasonal: true },
+        { t: 'Wide-brim hat', n: 'Neck protection matters — UV increases ~10% per 1,000ft gain', seasonal: true },
+      ],
+      'Clothing': [
+        { t: 'Insect repellent (Picaridin or DEET)', n: 'Mosquitoes peak at dawn/dusk near water in Sierra July–Aug', seasonal: true },
+      ],
+      'Safety': [
+        { t: 'Satellite communicator', n: 'Lightning can strand you fast on exposed Sierra ridges — get weather alerts before you leave', seasonal: true },
+      ],
+    },
+  },
+  fall: {
+    label: 'Fall Conditions',
+    months: 'Sep – Nov',
+    icon: '🍂',
+    color: '#c0813a',
+    tip: 'Days shorten fast after equinox. Hikers routinely get caught out after dark in October. Add 90 min to every turnaround time from September on.',
+    adds: {
+      'Safety': [
+        { t: 'Extra headlamp batteries or backup light', n: 'Sunset hits 5pm by November — plan to hike out in the dark or start earlier', seasonal: true },
+      ],
+      'Clothing': [
+        { t: 'Wind layer or softshell', n: 'Fall high-pressure brings cold nights even in SoCal — temps crash after sundown', seasonal: true },
+      ],
+      'Sleep System': [
+        { t: 'Sleeping bag liner', n: 'Adds 5–15°F buffer as shoulder season temps drop faster than expected', seasonal: true },
+      ],
+      'Navigation': [
+        { t: 'Paper topo map', n: 'Always a good idea — but fall hunting season means you want to know exactly where you are', seasonal: true },
+      ],
+    },
+  },
 };
 
 const WEIGHT_GUIDE = [
@@ -857,7 +1046,7 @@ const Pill = ({ label, color }) => (
 
 const InfoCell = ({ label, icon, statusObj }) => (
   <div style={{ padding: '10px', background: T.leatherDark, borderRadius: '4px', border: '1px solid ' + T.border }}>
-    <div style={{ fontSize: '0.6rem', color: T.muted, letterSpacing: '1.5px', marginBottom: '4px' }}>{icon} {label}</div>
+    <div style={{ fontSize: '0.6rem', color: T.muted, letterSpacing: '1.5px', marginBottom: '4px' }}>{label}</div>
     <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: statusObj.color }}>{statusObj.label}</div>
     <div style={{ fontSize: '0.7rem', color: T.muted, marginTop: '2px', fontStyle: 'italic' }}>{statusObj.desc}</div>
   </div>
@@ -1646,16 +1835,46 @@ const PlannerTab = ({ region, setRegion, terrainId, setTerrainId, sleepId, setSl
 };
 
 // =============================================================================
-// SLICE 3 (a11y) — PackTab with real checkbox inputs + button disclosures
+// PACK — Full rebuild: weight tracking, warning badges, swap suggestions, tips
 // =============================================================================
-const PackTab = ({ checked, setChecked, packType, setPackType }) => {
+const PackTab = ({ checked, setChecked, packType, setPackType, sleepId, onGoToPlan }) => {
   const [openCat, setOpenCat] = useState(null);
   const plan = PACKING[packType];
   const total = plan.cats.reduce((a, c) => a + c.items.length, 0);
   const done = Object.values(checked).filter(Boolean).length;
 
+  // Seasonal context
+  const month = useMemo(() => new Date().getMonth(), []);
+  const season = getSeason(month);
+  const sg = SEASONAL_GEAR[season];
+
+  // Sleep style context
+  const sleepStyle = sleepId ? SLEEP_STYLES.find(s => s.id === sleepId) : null;
+  const sleepMap = sleepId ? SLEEP_PACK_MAP[sleepId] : null;
+
+  // Estimated weight from oz fields on checked items
+  const estOz = plan.cats.reduce((sum, cat, ci) =>
+    sum + cat.items.reduce((s, item, ii) =>
+      s + (checked[packType + '-' + ci + '-' + ii] && item.oz ? item.oz : 0), 0), 0);
+  const estLbs = (estOz / 16).toFixed(1);
+
+  // Flagged items across all categories
+  const flaggedItems = plan.cats.reduce((arr, cat) => {
+    cat.items.forEach(item => { if (item.warn) arr.push(item); });
+    return arr;
+  }, []);
+
+  // Weight bar geometry
+  const [targetMin, targetMax] = plan.lbs || [20, 35];
+  const barMax = targetMax * 1.5;
+  const barPct = Math.min(100, (estOz / 16 / barMax) * 100);
+  const targetMinPct = (targetMin / barMax) * 100;
+  const targetMaxPct = (targetMax / barMax) * 100;
+  const barColor = estOz / 16 > targetMax ? T.bad : estOz / 16 > targetMin ? T.warn : T.good;
+
   return (
     <div>
+      {/* Pack type selector */}
       <div role="radiogroup" aria-label="Pack type" className="pack-type-grid">
         {Object.entries(PACKING).map(([k, p]) => {
           const active = packType === k;
@@ -1663,11 +1882,12 @@ const PackTab = ({ checked, setChecked, packType, setPackType }) => {
             <button key={k} type="button" role="radio" aria-checked={active}
               onClick={() => { setPackType(k); setChecked({}); setOpenCat(null); }}
               style={{
-                ...BUTTON_RESET, padding: '12px', borderRadius: '4px',
+                ...BUTTON_RESET, padding: '12px', borderRadius: '10px',
                 background: active ? T.leather : 'transparent',
                 border: '1px solid ' + (active ? T.gold : T.border),
                 color: active ? T.gold : T.muted,
                 fontFamily: 'Georgia, serif', fontSize: '0.85rem',
+                transition: 'all 150ms',
               }}>
               <div style={{ fontWeight: 'bold' }}>{p.label}</div>
               <div style={{ fontSize: '0.7rem', marginTop: '2px' }}>{p.weight}</div>
@@ -1676,33 +1896,163 @@ const PackTab = ({ checked, setChecked, packType, setPackType }) => {
         })}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
-        <div style={statCardStyle}>
-          <div style={{ fontSize: '0.65rem', color: T.muted, letterSpacing: '2px' }}>TARGET WEIGHT</div>
-          <div style={{ fontSize: '1.2rem', color: T.gold, fontWeight: 'bold', marginTop: '4px' }}>{plan.weight}</div>
-        </div>
-        <div style={statCardStyle}>
-          <div style={{ fontSize: '0.65rem', color: T.muted, letterSpacing: '2px' }}>PACKED</div>
-          <div style={{ fontSize: '1.2rem', color: T.gold, fontWeight: 'bold', marginTop: '4px' }}>{done} / {total}</div>
-        </div>
-      </div>
-
-      <div style={{ padding: '14px', background: T.leatherDark, borderRadius: '6px', border: '1px solid ' + T.border, marginBottom: '18px' }}>
-        <div style={{ fontSize: '0.7rem', color: T.gold, letterSpacing: '2px', marginBottom: '8px' }}>WEIGHT GUIDE</div>
-        {WEIGHT_GUIDE.map(w => (
-          <div key={w.range} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '3px 0', fontSize: '0.75rem' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: w.color }} />
-            <span style={{ width: '80px', fontWeight: 'bold', color: w.color }}>{w.range}</span>
-            <span style={{ color: T.muted }}>{w.label} - {w.desc}</span>
+      {/* Sleep style banner — or CTA to go pick one */}
+      {!sleepStyle ? (
+        <div style={{ padding: '14px 16px', background: 'rgba(194,155,97,0.06)', borderRadius: '12px', border: '1px dashed ' + T.border, marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div>
+            <div style={{ fontSize: '0.65rem', color: T.muted, letterSpacing: '2px', marginBottom: '4px' }}>NO SLEEP STYLE CHOSEN</div>
+            <div style={{ fontSize: '0.8rem', color: T.text, lineHeight: 1.5 }}>Pick a sleep style in the Plan tab to get shelter-specific gear recommendations here.</div>
           </div>
-        ))}
+          <button type="button" onClick={onGoToPlan}
+            style={{ ...BUTTON_RESET, width: 'auto', flexShrink: 0, padding: '8px 14px', background: T.leather, border: '1px solid ' + T.gold, borderRadius: '8px', color: T.gold, fontSize: '0.75rem', fontFamily: 'Georgia, serif', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            → Go to Plan
+          </button>
+        </div>
+      ) : (
+        <div style={{ padding: '13px 16px', background: 'rgba(194,155,97,0.07)', borderRadius: '12px', border: '1px solid rgba(194,155,97,0.3)', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+            <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>{sleepMap.icon}</span>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: '0.65rem', color: T.gold, letterSpacing: '2px', fontWeight: 'bold' }}>SLEEP STYLE</span>
+              <span style={{ fontSize: '0.65rem', color: T.muted, marginLeft: '8px' }}>{sleepStyle.name}</span>
+            </div>
+            <button type="button" onClick={onGoToPlan}
+              style={{ ...BUTTON_RESET, width: 'auto', fontSize: '0.65rem', color: T.muted, cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: '1px solid ' + T.border }}>
+              change
+            </button>
+          </div>
+          <div style={{ fontSize: '0.78rem', color: T.text, lineHeight: 1.65 }}>{sleepMap.note}</div>
+          {(sleepMap.skip.length > 0 || sleepMap.sleepSkip.length > 0) && (
+            <div style={{ marginTop: '8px', fontSize: '0.7rem', color: T.muted, fontStyle: 'italic' }}>
+              Items marked <span style={{ color: T.bad }}>✕ skip</span> are not needed for your sleep style.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Seasonal conditions banner */}
+      <div style={{ padding: '14px 16px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid ' + sg.color + '55', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{sg.icon}</span>
+          <div>
+            <span style={{ fontSize: '0.65rem', color: sg.color, letterSpacing: '2px', fontWeight: 'bold' }}>{sg.label.toUpperCase()}</span>
+            <span style={{ fontSize: '0.65rem', color: T.muted, marginLeft: '8px' }}>{sg.months}</span>
+          </div>
+          <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: T.muted, fontStyle: 'italic' }}>
+            seasonal add-ons marked below ↓
+          </span>
+        </div>
+        <div style={{ fontSize: '0.78rem', color: T.text, lineHeight: 1.65 }}>{sg.tip}</div>
       </div>
 
+      {/* Gear analysis summary card */}
+      <div style={{ padding: '16px', background: T.leatherDark, borderRadius: '12px', border: '1px solid ' + T.border, marginBottom: '16px' }}>
+        <div style={{ fontSize: '0.65rem', color: T.gold, letterSpacing: '3px', marginBottom: '12px' }}>GEAR ANALYSIS</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: T.gold }}>{done}/{total}</div>
+            <div style={{ fontSize: '0.6rem', color: T.muted, letterSpacing: '1px', marginTop: '2px' }}>PACKED</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: estOz > 0 ? barColor : T.muted }}>
+              {estOz > 0 ? estLbs + ' lbs' : '—'}
+            </div>
+            <div style={{ fontSize: '0.6rem', color: T.muted, letterSpacing: '1px', marginTop: '2px' }}>EST. WEIGHT</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: flaggedItems.length > 0 ? T.warn : T.good }}>
+              {flaggedItems.length}
+            </div>
+            <div style={{ fontSize: '0.6rem', color: T.muted, letterSpacing: '1px', marginTop: '2px' }}>FLAGGED</div>
+          </div>
+        </div>
+
+        {/* Visual weight bar */}
+        <div style={{ marginBottom: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: T.muted, marginBottom: '6px' }}>
+            <span>Tracking checked items · <span style={{ color: barColor, fontWeight: 'bold' }}>{estOz > 0 ? estLbs + ' lbs so far' : 'check items to track'}</span></span>
+            <span>Target: {plan.weight}</span>
+          </div>
+          <div style={{ position: 'relative', height: '10px', background: 'rgba(255,255,255,0.06)', borderRadius: '5px' }}>
+            {/* target zone shading */}
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: targetMinPct + '%', width: (targetMaxPct - targetMinPct) + '%',
+              background: 'rgba(194,155,97,0.18)', borderRadius: '3px',
+            }} />
+            {/* actual bar */}
+            {estOz > 0 && (
+              <div style={{
+                position: 'absolute', top: 0, bottom: 0, left: 0,
+                width: barPct + '%', background: barColor,
+                borderRadius: '5px', transition: 'width 0.4s ease',
+                minWidth: '4px',
+              }} />
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: T.muted, marginTop: '4px' }}>
+            <span>0 lbs</span>
+            <span style={{ color: 'rgba(194,155,97,0.6)' }}>▲ {targetMin}–{targetMax} lbs target</span>
+            <span>{Math.round(barMax)} lbs</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Flagged items rollup */}
+      {flaggedItems.length > 0 && (
+        <div style={{ padding: '12px 14px', background: 'rgba(200,100,50,0.07)', borderRadius: '10px', border: '1px solid rgba(200,100,50,0.22)', marginBottom: '16px' }}>
+          <div style={{ fontSize: '0.65rem', color: T.warn, letterSpacing: '2px', marginBottom: '10px' }}>⚠ GEAR FLAGS — items worth reconsidering</div>
+          {flaggedItems.map((item, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'flex-start', gap: '8px',
+              paddingBottom: i < flaggedItems.length - 1 ? '8px' : 0,
+              marginBottom: i < flaggedItems.length - 1 ? '8px' : 0,
+              borderBottom: i < flaggedItems.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+            }}>
+              {item.warn === 'heavy' && (
+                <span style={{ fontSize: '0.6rem', padding: '2px 7px', borderRadius: '10px', background: 'rgba(212,147,68,0.2)', color: T.warn, border: '1px solid rgba(212,147,68,0.35)', flexShrink: 0, lineHeight: '18px', whiteSpace: 'nowrap' }}>⚠ heavy</span>
+              )}
+              {item.warn === 'nobp' && (
+                <span style={{ fontSize: '0.6rem', padding: '2px 7px', borderRadius: '10px', background: 'rgba(180,60,60,0.2)', color: T.bad, border: '1px solid rgba(180,60,60,0.35)', flexShrink: 0, lineHeight: '18px', whiteSpace: 'nowrap' }}>✕ not for BP</span>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.8rem', color: T.text }}>
+                  {item.t}
+                  {item.oz ? <span style={{ color: T.muted, fontSize: '0.72rem' }}> · {item.oz}oz</span> : null}
+                </div>
+                {item.swap && (
+                  <div style={{ fontSize: '0.72rem', color: T.good, marginTop: '3px' }}>↩ {item.swap}</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Category accordions */}
       {plan.cats.map((cat, ci) => {
         const isOpen = openCat === ci;
         const catTotal = cat.items.length;
         const catDone = cat.items.filter((_, ii) => checked[packType + '-' + ci + '-' + ii]).length;
+        const catFlags = cat.items.filter(item => item.warn).length;
+        const catOz = cat.items.reduce((s, item, ii) =>
+          s + (checked[packType + '-' + ci + '-' + ii] && item.oz ? item.oz : 0), 0);
         const panelId = 'pack-cat-' + ci;
+        const tip = COMMUNITY_TIPS[cat.name];
+        const seasonalItems = (sg.adds && sg.adds[cat.name]) || [];
+        // Sleep style skip/needed sets for this category
+        const isShelterCat = cat.name === 'Shelter';
+        const isSleepCat = cat.name === 'Sleep System';
+        const getItemSleepStatus = (itemTitle) => {
+          if (!sleepMap) return null;
+          if (isShelterCat) {
+            if (sleepMap.skip.includes(itemTitle)) return 'skip';
+            if (sleepMap.needed.includes(itemTitle)) return 'needed';
+          }
+          if (isSleepCat && sleepMap.sleepSkip.includes(itemTitle)) return 'skip';
+          return null;
+        };
+
         return (
           <div key={ci} style={{ marginBottom: '6px' }}>
             <button
@@ -1711,46 +2061,143 @@ const PackTab = ({ checked, setChecked, packType, setPackType }) => {
               aria-expanded={isOpen}
               aria-controls={panelId}
               style={{
-                ...BUTTON_RESET, padding: '12px 14px', background: T.leather, borderRadius: '4px',
+                ...BUTTON_RESET, padding: '13px 14px',
+                background: isOpen ? T.leather : 'rgba(0,0,0,0.18)',
+                borderRadius: isOpen ? '10px 10px 0 0' : '10px',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 border: '1px solid ' + (isOpen ? T.gold : T.border),
+                borderBottom: isOpen ? 'none' : undefined,
+                transition: 'background 150ms, border-color 150ms',
               }}>
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>{cat.name}</span>
-                <span style={{ color: T.muted, fontSize: '0.75rem', marginLeft: '8px' }}>{catTotal} items</span>
+                {catFlags > 0 && (
+                  <span style={{ fontSize: '0.6rem', padding: '2px 7px', borderRadius: '10px', background: 'rgba(212,147,68,0.18)', color: T.warn, border: '1px solid rgba(212,147,68,0.28)' }}>
+                    ⚠ {catFlags}
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {catDone > 0 && <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '10px', background: 'rgba(194,155,97,0.2)', color: T.gold }}>{catDone}/{catTotal}</span>}
-                <span aria-hidden style={{ color: T.gold, fontSize: '1.2rem' }}>{isOpen ? '−' : '+'}</span>
+                {catOz > 0 && (
+                  <span style={{ fontSize: '0.68rem', color: T.muted }}>{(catOz / 16).toFixed(1)} lb</span>
+                )}
+                {catDone > 0 && (
+                  <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '10px', background: 'rgba(194,155,97,0.15)', color: T.gold }}>{catDone}/{catTotal}</span>
+                )}
+                <span aria-hidden style={{ color: T.gold, fontSize: '1.2rem', lineHeight: 1 }}>{isOpen ? '−' : '+'}</span>
               </div>
             </button>
+
             {isOpen && (
-              <div id={panelId} style={{ padding: '8px 4px', background: T.leatherDark, borderRadius: '0 0 4px 4px' }}>
-                {cat.items.map((item, ii) => {
-                  const k = packType + '-' + ci + '-' + ii;
-                  const isChecked = !!checked[k];
-                  const inputId = 'pack-item-' + k;
-                  return (
-                    <label key={ii} htmlFor={inputId}
-                      style={{ display: 'flex', gap: '10px', padding: '8px 12px', cursor: 'pointer', borderRadius: '4px',
-                        background: isChecked ? 'rgba(194,155,97,0.08)' : 'transparent' }}>
-                      <input
-                        id={inputId}
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => setChecked(prev => ({ ...prev, [k]: !prev[k] }))}
+              <div id={panelId} style={{ background: T.leatherDark, borderRadius: '0 0 10px 10px', border: '1px solid ' + T.gold, borderTop: 'none', overflow: 'hidden' }}>
+                {/* Reddit-style field tip */}
+                {tip && (
+                  <div style={{ margin: '12px 12px 4px', padding: '11px 13px', background: 'rgba(194,155,97,0.07)', borderRadius: '8px', border: '1px solid rgba(194,155,97,0.22)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.6rem', padding: '2px 8px', borderRadius: '10px', background: 'rgba(194,155,97,0.2)', color: T.gold, letterSpacing: '1px', fontWeight: 'bold' }}>{tip.src}</span>
+                      <span style={{ fontSize: '0.6rem', color: T.muted, letterSpacing: '1.5px' }}>FIELD TIP</span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: T.text, lineHeight: 1.65, fontStyle: 'italic' }}>"{tip.tip}"</div>
+                  </div>
+                )}
+
+                {/* Item rows */}
+                <div style={{ padding: '6px 4px 8px' }}>
+                  {cat.items.map((item, ii) => {
+                    const k = packType + '-' + ci + '-' + ii;
+                    const isChecked = !!checked[k];
+                    const inputId = 'pack-item-' + k;
+                    const sleepStatus = getItemSleepStatus(item.t);
+                    const isSkipped = sleepStatus === 'skip';
+                    const isNeeded = sleepStatus === 'needed';
+                    return (
+                      <label key={ii} htmlFor={inputId}
                         style={{
-                          width: '16px', height: '16px', flexShrink: 0, marginTop: '2px',
-                          accentColor: T.gold, cursor: 'pointer',
-                        }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.85rem', color: isChecked ? T.muted : T.text,
-                          textDecoration: isChecked ? 'line-through' : 'none' }}>{item.t}</div>
-                        {item.n && <div style={{ fontSize: '0.7rem', color: T.muted, fontStyle: 'italic', marginTop: '2px' }}>{item.n}</div>}
-                      </div>
-                    </label>
-                  );
-                })}
+                          display: 'flex', gap: '10px', padding: '8px 12px', cursor: 'pointer',
+                          borderRadius: '6px', alignItems: 'flex-start',
+                          background: isChecked ? 'rgba(194,155,97,0.08)' : isSkipped ? 'rgba(180,60,60,0.04)' : isNeeded ? 'rgba(100,180,100,0.06)' : 'transparent',
+                          opacity: isSkipped ? 0.55 : 1,
+                          borderLeft: isNeeded ? '2px solid ' + T.good : isSkipped ? '2px solid rgba(180,60,60,0.3)' : '2px solid transparent',
+                        }}>
+                        <input
+                          id={inputId}
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => setChecked(prev => ({ ...prev, [k]: !prev[k] }))}
+                          style={{ width: '16px', height: '16px', flexShrink: 0, marginTop: '3px', accentColor: T.gold, cursor: 'pointer' }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.85rem', color: isChecked ? T.muted : isSkipped ? T.muted : T.text, textDecoration: isChecked || isSkipped ? 'line-through' : 'none' }}>
+                              {item.t}
+                            </span>
+                            {isNeeded && (
+                              <span style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: '8px', background: 'rgba(100,180,100,0.18)', color: T.good, border: '1px solid rgba(100,180,100,0.35)', whiteSpace: 'nowrap' }}>✓ your style</span>
+                            )}
+                            {isSkipped && (
+                              <span style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: '8px', background: 'rgba(180,60,60,0.15)', color: T.bad, border: '1px solid rgba(180,60,60,0.3)', whiteSpace: 'nowrap' }}>✕ skip</span>
+                            )}
+                            {item.warn === 'heavy' && !isSkipped && (
+                              <span style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: '8px', background: 'rgba(212,147,68,0.18)', color: T.warn, border: '1px solid rgba(212,147,68,0.32)', whiteSpace: 'nowrap' }}>⚠ heavy</span>
+                            )}
+                            {item.warn === 'nobp' && !isSkipped && (
+                              <span style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: '8px', background: 'rgba(180,60,60,0.18)', color: T.bad, border: '1px solid rgba(180,60,60,0.32)', whiteSpace: 'nowrap' }}>✕ not for BP</span>
+                            )}
+                            {item.oz != null && (
+                              <span style={{ fontSize: '0.65rem', color: T.muted, marginLeft: 'auto', flexShrink: 0 }}>{item.oz}oz</span>
+                            )}
+                          </div>
+                          {item.n && (
+                            <div style={{ fontSize: '0.7rem', color: T.muted, fontStyle: 'italic', marginTop: '2px' }}>{item.n}</div>
+                          )}
+                          {item.swap && !isSkipped && (
+                            <div style={{ fontSize: '0.72rem', color: T.good, marginTop: '4px', display: 'flex', gap: '4px' }}>
+                              <span style={{ flexShrink: 0 }}>↩</span>
+                              <span>{item.swap}</span>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* Seasonal add-ons for this category */}
+                {seasonalItems.length > 0 && (
+                  <div style={{ margin: '0 8px 10px', padding: '10px', background: sg.color + '0d', borderRadius: '8px', border: '1px dashed ' + sg.color + '55' }}>
+                    <div style={{ fontSize: '0.6rem', color: sg.color, letterSpacing: '2px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>{sg.icon}</span>
+                      <span>{sg.label.toUpperCase()} ADD-ONS</span>
+                    </div>
+                    {seasonalItems.map((item, si) => {
+                      const k = 'seasonal-' + packType + '-' + ci + '-' + si;
+                      const isChecked = !!checked[k];
+                      const inputId = 'pack-seasonal-' + k;
+                      return (
+                        <label key={si} htmlFor={inputId}
+                          style={{
+                            display: 'flex', gap: '10px', padding: '7px 10px', cursor: 'pointer',
+                            borderRadius: '6px', alignItems: 'flex-start',
+                            background: isChecked ? sg.color + '18' : 'transparent',
+                          }}>
+                          <input
+                            id={inputId}
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => setChecked(prev => ({ ...prev, [k]: !prev[k] }))}
+                            style={{ width: '16px', height: '16px', flexShrink: 0, marginTop: '3px', accentColor: sg.color, cursor: 'pointer' }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.85rem', color: isChecked ? T.muted : '#fff', textDecoration: isChecked ? 'line-through' : 'none' }}>
+                              {item.t}
+                            </div>
+                            {item.n && (
+                              <div style={{ fontSize: '0.7rem', color: T.muted, fontStyle: 'italic', marginTop: '2px' }}>{item.n}</div>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1797,6 +2244,249 @@ const APP_STYLES = `
   }
 `;
 
+// =============================================================================
+// INFO SIDEBAR — left-edge tab + sliding drawer
+// Sections: About, FAQ, Safety, Leave No Trace, Legal
+// =============================================================================
+const SIDEBAR_SECTIONS = [
+  {
+    id: 'about',
+    label: 'About',
+    icon: '⛺',
+    content: () => (
+      <div>
+        <p style={{ fontSize: '0.85rem', color: T.text, lineHeight: 1.75, marginBottom: '14px' }}>
+          <strong style={{ color: T.gold }}>Dirtmap</strong> is a California camping and trails field guide — built for the people who want to get off the beaten path without getting lost on it.
+        </p>
+        <p style={{ fontSize: '0.85rem', color: T.muted, lineHeight: 1.75, marginBottom: '14px' }}>
+          Think of it as a campfire field guide in app form. Not a sterile list of pins, but real context: what terrain actually feels like, when to go, what to pack, what the trail community is saying.
+        </p>
+        <p style={{ fontSize: '0.85rem', color: T.muted, lineHeight: 1.75, marginBottom: '20px' }}>
+          Built for California specifically — the Sierras, the Coast, the Mojave, the Redwoods. Each region gets its own treatment.
+        </p>
+        <div style={{ padding: '12px 14px', background: T.leatherDark, borderRadius: '8px', border: '1px solid ' + T.border }}>
+          <div style={{ fontSize: '0.6rem', color: T.gold, letterSpacing: '2px', marginBottom: '6px' }}>VERSION</div>
+          <div style={{ fontSize: '0.78rem', color: T.muted }}>Early access — spots, trails, and gear data are actively updated. Found something wrong? Use the feedback option below.</div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: 'faq',
+    label: 'FAQ',
+    icon: '?',
+    content: () => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {[
+          { q: 'Are the trail distances accurate?', a: 'Distances are sourced from community trail databases and NPS data. Always cross-reference with an offline map like Gaia GPS or CalTopo before heading out — conditions and routes change.' },
+          { q: 'How current is the campsite info?', a: 'Campsite data reflects general known conditions. Fees, permit requirements, and seasonal closures change frequently. Always verify directly with the land manager (USFS, NPS, BLM, California State Parks) before your trip.' },
+          { q: 'Are the pack weights accurate?', a: 'Weights are community averages based on typical gear in each category — not tied to a specific brand or product. Your actual pack weight will vary significantly based on what you own. Use the weight bar as a rough guide, not a spec sheet.' },
+          { q: 'Is the elevation data reliable?', a: 'Elevation profiles are fetched live from SRTM90m satellite data via OpenTopoData. Accuracy is typically within 30–90 meters. Treat it as a general shape, not a precise survey.' },
+          { q: 'Do you handle permits?', a: 'No — Dirtmap only shows whether a permit is required and where to get one. Reservations go through Recreation.gov, ReserveCA, or the relevant agency directly.' },
+          { q: 'Why California only?', a: 'Depth over breadth. California alone has 8 distinct ecosystems, 280+ wilderness areas, and more public land than most countries. Getting one state right matters more than having 50 states done halfway.' },
+          { q: 'Can I suggest a spot or trail?', a: 'Yes — feedback is always open. The goal is to surface hidden gems that don\'t show up on the mainstream apps.' },
+        ].map(({ q, a }, i) => (
+          <div key={i} style={{ paddingBottom: '14px', borderBottom: '1px solid ' + T.border }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: T.gold, marginBottom: '6px', lineHeight: 1.4 }}>{q}</div>
+            <div style={{ fontSize: '0.8rem', color: T.muted, lineHeight: 1.7 }}>{a}</div>
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: 'safety',
+    label: 'Safety',
+    icon: '🆘',
+    content: () => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ padding: '10px 12px', background: 'rgba(180,60,60,0.12)', borderRadius: '8px', border: '1px solid rgba(180,60,60,0.3)' }}>
+          <div style={{ fontSize: '0.7rem', color: T.bad, letterSpacing: '2px', marginBottom: '4px', fontWeight: 'bold' }}>EMERGENCY</div>
+          <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 'bold' }}>Call 911 · CHP Dispatch: 800-CALL-CHP</div>
+          <div style={{ fontSize: '0.75rem', color: T.muted, marginTop: '4px' }}>No cell signal? Activate a PLB, Garmin inReach, or SPOT device. Pre-file a trip plan with someone who knows when to call for help.</div>
+        </div>
+        {[
+          { title: 'Bear Encounter', color: T.warn, steps: ['Stay calm — do not run. Running triggers chase instinct.', 'Make yourself look large, speak in a firm low voice.', 'Back away slowly, never turn your back.', 'If a black bear charges: fight back aggressively — eyes and nose.', 'If a grizzly (rare in CA) bluff charges: stand ground. If contact: play dead.', 'Store food in a bear canister or hang it 10ft up / 4ft from trunk.'] },
+          { title: 'Lightning', color: '#7bbfdc', steps: ['Get off exposed ridges, peaks, and meadows by noon in Sierra.', 'Descend below treeline — lightning storms build fast 1–4pm.', 'If caught: crouch on balls of feet, feet together, ears covered. Do not lie flat.', 'Avoid lone trees, water, and metal objects.', 'Wait 30 min after the last thunder before moving.'] },
+          { title: 'Altitude Sickness', color: '#78b87a', steps: ['Symptoms: headache, nausea, fatigue, dizziness above ~8,000ft.', 'Do not ascend if symptoms appear — descend 1,000–2,000ft.', 'Acclimatize: spend a night at mid-elevation before going high.', 'Hydrate aggressively. Avoid alcohol first 24 hours at altitude.', 'Severe symptoms (confusion, can\'t walk straight): emergency descent immediately.'] },
+          { title: 'Snake Bite', color: T.warn, steps: ['Stay calm, immobilize the bitten limb below heart level.', 'Remove rings/watches near the bite — swelling will occur.', 'Do not cut, suck, apply tourniquet, or use ice.', 'Get to an ER as fast as possible — antivenom is the only treatment.', 'Note the snake\'s appearance if safe to do so (helps ID species).'] },
+          { title: 'Dehydration / Heat Exhaustion', color: '#c0813a', steps: ['Drink before you\'re thirsty — thirst means you\'re already behind.', 'Signs: dark urine, headache, dizziness, muscle cramps.', 'Heat exhaustion: move to shade, wet clothing, fan vigorously, drink electrolytes.', 'Heat stroke (no sweating, confusion): 911 immediately — this is life-threatening.', 'Desert rule: carry 1L per hour of active hiking, minimum.'] },
+        ].map(({ title, color, steps }) => (
+          <div key={title} style={{ padding: '12px 14px', background: T.leatherDark, borderRadius: '8px', border: '1px solid ' + T.border }}>
+            <div style={{ fontSize: '0.72rem', color, letterSpacing: '2px', fontWeight: 'bold', marginBottom: '8px' }}>{title.toUpperCase()}</div>
+            {steps.map((s, i) => (
+              <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '5px', fontSize: '0.78rem', color: T.text, lineHeight: 1.55 }}>
+                <span style={{ color, flexShrink: 0, fontWeight: 'bold' }}>{i + 1}.</span>
+                <span>{s}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: 'lnt',
+    label: 'Leave No Trace',
+    icon: '🌿',
+    content: () => (
+      <div>
+        <p style={{ fontSize: '0.8rem', color: T.muted, lineHeight: 1.7, marginBottom: '16px' }}>
+          California's wilderness is under unprecedented pressure. These aren't suggestions — they're what keeps access open for the next person.
+        </p>
+        {[
+          { num: 1, title: 'Plan Ahead & Prepare', color: T.gold, items: ['Check fire restrictions before every trip — CA fire rules change fast.', 'Know the permit requirements for your area. Some require advance lottery.', 'Download offline maps before you leave cell range. Never rely on signal.', 'Tell someone your route and expected return time.'] },
+          { num: 2, title: 'Travel & Camp on Durable Surfaces', color: '#78b87a', items: ['Stay on established trails — shortcutting kills vegetation and widens erosion.', 'Camp 200ft from lakes, streams, and trails. Use existing sites.', 'In the backcountry, camp on rock, gravel, or dry grass — not fragile meadow.'] },
+          { num: 3, title: 'Dispose of Waste Properly', color: T.warn, items: ['Pack out ALL trash, including biodegradable food scraps.', 'Cat holes: 6–8 inches deep, 200ft from water, trails, and campsites.', 'Pack out TP — even "biodegradable" TP takes years at altitude.', 'WAG bags required on Mt. Whitney and many other high-use peaks.', 'Gray water: scatter 200ft from water sources. No soap in streams.'] },
+          { num: 4, title: 'Leave What You Find', color: '#7bbfdc', items: ['Leave rocks, plants, animals, and cultural artifacts where they are.', 'Don\'t build cairns — they confuse navigation and damage terrain.', 'No wildflower picking. Many CA species are protected.'] },
+          { num: 5, title: 'Minimize Campfire Impact', color: '#c0813a', items: ['Check burn restrictions at CAFireSafe.com before every trip.', 'Use existing fire rings only. Never build new rings.', 'Burn wood to ash, drown completely, scatter the ash cold.', 'Pack a stove — most CA wilderness fires are prohibited in summer.'] },
+          { num: 6, title: 'Respect Wildlife', color: T.good, items: ['Never feed wildlife — it gets them killed. Fed bears are destroyed.', '100-yard distance from bears and wolves. 25 yards from other wildlife.', 'Store food per regulations — bear canisters required in most Sierra wilderness.', 'Keep pets under control. Dogs disturb wildlife and nesting birds.'] },
+          { num: 7, title: 'Be Considerate of Others', color: T.muted, items: ['Yield to uphill hikers and horses. Step off trail on the downhill side for horses.', 'Keep noise down — sound carries far in canyon and alpine terrain.', 'Camp out of sight and sound of other groups where possible.', 'Right of way: horses > hikers > bikers.'] },
+        ].map(({ num, title, color, items }) => (
+          <div key={num} style={{ marginBottom: '14px', padding: '12px 14px', background: T.leatherDark, borderRadius: '8px', border: '1px solid ' + T.border }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: color + '30', border: '1px solid ' + color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: '0.65rem', color, fontWeight: 'bold' }}>{num}</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color, fontWeight: 'bold', letterSpacing: '0.5px' }}>{title}</div>
+            </div>
+            {items.map((item, i) => (
+              <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px', fontSize: '0.77rem', color: T.text, lineHeight: 1.55 }}>
+                <span style={{ color, flexShrink: 0 }}>—</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: 'legal',
+    label: 'Legal',
+    icon: '⚖',
+    content: () => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ padding: '12px 14px', background: 'rgba(180,60,60,0.1)', borderRadius: '8px', border: '1px solid rgba(180,60,60,0.25)' }}>
+          <div style={{ fontSize: '0.72rem', color: T.bad, letterSpacing: '2px', fontWeight: 'bold', marginBottom: '6px' }}>READ THIS BEFORE USING DIRTMAP</div>
+          <div style={{ fontSize: '0.8rem', color: T.text, lineHeight: 1.7 }}>
+            Dirtmap provides general information for recreational planning purposes only. It is not a substitute for proper outdoor training, professional guiding, or judgment in the field.
+          </div>
+        </div>
+        {[
+          {
+            title: 'Assumption of Risk',
+            body: 'Outdoor and wilderness activities — including hiking, backpacking, camping, and trail running — involve inherent risks, hazards, and dangers that may result in serious injury or death. These include but are not limited to: falls, drowning, dehydration, hyperthermia, hypothermia, altitude sickness, lightning strikes, wildlife encounters, and rapidly changing weather conditions. By using Dirtmap and venturing into the outdoors, you voluntarily assume full responsibility for all risks associated with your activities.',
+          },
+          {
+            title: 'No Warranty on Information Accuracy',
+            body: 'Trail distances, elevation data, campsite details, permit requirements, fees, seasonal conditions, water source availability, and road access information may be inaccurate, outdated, or incomplete. Conditions in wilderness areas change rapidly due to weather, fire, flood, drought, and agency management decisions. Dirtmap makes no representation or warranty — express or implied — as to the accuracy, completeness, or fitness for a particular purpose of any information on this site. Always verify current conditions directly with the relevant land management agency (USFS, NPS, BLM, California State Parks) before your trip.',
+          },
+          {
+            title: 'Pack Weight Estimates',
+            body: 'Gear weights shown in the Pack section are approximate averages based on commonly available products in each category. They are not based on any specific brand, model, or your actual equipment. Your real pack weight will differ. These estimates are provided as rough planning guidance only and should not be relied upon for safety-critical decisions.',
+          },
+          {
+            title: 'Community Tips & Third-Party Content',
+            body: 'Tips attributed to online communities (Reddit, forums, etc.) represent general community knowledge and opinions. They do not constitute professional advice. Dirtmap does not verify, endorse, or guarantee the accuracy of any community-sourced content. Use your own judgment and consult qualified professionals where appropriate.',
+          },
+          {
+            title: 'Emergency Services Disclaimer',
+            body: 'Dirtmap is not an emergency response service. In an emergency, call 911 or activate a personal locator beacon (PLB) or satellite communicator. Do not rely on Dirtmap for rescue, navigation, or emergency guidance.',
+          },
+          {
+            title: 'California Recreational Use Statute',
+            body: 'Under California Civil Code § 846, landowners who permit recreational use of their land owe no duty of care to keep the premises safe or to warn of hazards. This statute reflects the California Legislature\'s recognition that outdoor recreation involves inherent risk. Dirtmap operates in the same spirit: we provide information to enhance your experience, not to guarantee your safety.',
+          },
+          {
+            title: 'Limitation of Liability',
+            body: 'To the fullest extent permitted by applicable law, Dirtmap and its creators shall not be liable for any direct, indirect, incidental, special, or consequential damages arising from your use of this app or from outdoor activities undertaken in reliance on information provided here — including but not limited to personal injury, death, property damage, or loss of any kind.',
+          },
+          {
+            title: 'No Endorsement of Third Parties',
+            body: 'References to land management agencies, reservation systems, gear categories, or external services are for informational purposes only and do not constitute an endorsement. Dirtmap has no commercial relationship with any gear brand, outfitter, or campsite operator.',
+          },
+        ].map(({ title, body }) => (
+          <div key={title} style={{ padding: '12px 14px', background: T.leatherDark, borderRadius: '8px', border: '1px solid ' + T.border }}>
+            <div style={{ fontSize: '0.7rem', color: T.gold, letterSpacing: '2px', fontWeight: 'bold', marginBottom: '6px' }}>{title.toUpperCase()}</div>
+            <div style={{ fontSize: '0.77rem', color: T.muted, lineHeight: 1.75 }}>{body}</div>
+          </div>
+        ))}
+        <div style={{ fontSize: '0.68rem', color: T.border, lineHeight: 1.6, textAlign: 'center', paddingTop: '8px' }}>
+          Last updated May 2026 · California · For questions contact the Dirtmap team
+        </div>
+      </div>
+    ),
+  },
+];
+
+const InfoSidebar = ({ open, onClose }) => {
+  const [activeSection, setActiveSection] = useState('about');
+  const section = SIDEBAR_SECTIONS.find(s => s.id === activeSection);
+
+  return (
+    <>
+      {/* Backdrop */}
+      {open && (
+        <div
+          onClick={onClose}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000 }}
+        />
+      )}
+
+      {/* Drawer */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, bottom: 0,
+        width: '420px', maxWidth: '92vw',
+        background: T.leather,
+        borderRight: '1px solid ' + T.border,
+        boxShadow: '8px 0 40px rgba(0,0,0,0.5)',
+        zIndex: 2001,
+        display: 'flex', flexDirection: 'column',
+        transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 280ms cubic-bezier(0.4,0,0.2,1)',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '18px 18px 0', borderBottom: '1px solid ' + T.border, flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ color: T.gold, fontSize: '1.1rem', fontWeight: 'bold', letterSpacing: '2px', fontFamily: 'Georgia, serif' }}>dirtmap</div>
+            <button type="button" onClick={onClose}
+              style={{ ...BUTTON_RESET, width: 'auto', color: T.muted, fontSize: '1.6rem', lineHeight: 1, padding: '0 4px' }}>×</button>
+          </div>
+          {/* Section tabs */}
+          <div style={{ display: 'flex', gap: '2px', overflowX: 'auto', paddingBottom: '0' }}>
+            {SIDEBAR_SECTIONS.map(s => {
+              const active = activeSection === s.id;
+              return (
+                <button key={s.id} type="button"
+                  onClick={() => setActiveSection(s.id)}
+                  style={{
+                    ...BUTTON_RESET, width: 'auto', whiteSpace: 'nowrap',
+                    padding: '8px 12px', fontSize: '0.72rem', letterSpacing: '1px',
+                    color: active ? T.gold : T.muted,
+                    borderBottom: '2px solid ' + (active ? T.gold : 'transparent'),
+                    fontFamily: 'Georgia, serif', cursor: 'pointer',
+                    transition: 'color 150ms, border-color 150ms',
+                  }}>
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 40px' }}>
+          <div style={{ fontSize: '0.6rem', color: T.muted, letterSpacing: '3px', marginBottom: '16px' }}>
+            {section.icon} {section.label.toUpperCase()}
+          </div>
+          {section.content()}
+        </div>
+      </div>
+    </>
+  );
+};
+
 export default function App() {
   const [tab, setTab] = useState('planner');
   const [region, setRegion] = useState('Southern California');
@@ -1810,6 +2500,7 @@ export default function App() {
   const [jumpToSpot, setJumpToSpot] = useState(null);
   const goToMap = (sp) => { setJumpToSpot(sp); setTab('map'); };
   const [showSaved, setShowSaved] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const toggleSavedTrail = (key) => {
     setSavedTrails(prev => {
       const next = { ...prev, [key]: !prev[key] };
@@ -1822,6 +2513,37 @@ export default function App() {
   return (
     <div style={{ backgroundColor: T.nightCamp, minHeight: '100vh', color: T.text, fontFamily: 'Georgia, serif' }}>
       <style>{APP_STYLES}</style>
+
+      {/* Left sidebar toggle tab */}
+      <button
+        type="button"
+        onClick={() => setShowSidebar(true)}
+        aria-label="Open info sidebar"
+        style={{
+          ...BUTTON_RESET,
+          position: 'fixed', left: 0, top: '50%', transform: 'translateY(-50%)',
+          zIndex: 1500,
+          width: '22px',
+          paddingTop: '32px', paddingBottom: '32px',
+          background: T.leather,
+          border: '1px solid ' + T.border,
+          borderLeft: 'none',
+          borderRadius: '0 8px 8px 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: '3px 0 12px rgba(0,0,0,0.4)',
+          transition: 'background 150ms, border-color 150ms',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = T.leatherDark; e.currentTarget.style.borderColor = T.gold; }}
+        onMouseLeave={e => { e.currentTarget.style.background = T.leather; e.currentTarget.style.borderColor = T.border; }}
+      >
+        <span style={{
+          writingMode: 'vertical-rl', textOrientation: 'mixed',
+          transform: 'rotate(180deg)',
+          fontSize: '0.55rem', letterSpacing: '2.5px', color: T.muted,
+          fontFamily: 'Georgia, serif', fontWeight: 'bold', userSelect: 'none',
+        }}>INFO</span>
+      </button>
 
       <div className="header-bar" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1842,7 +2564,7 @@ export default function App() {
               <span style={{ color: T.muted }}>saved</span>
             </button>
           )}
-          {[['planner','PLAN'],['map','MAP'],['pack','PACK']].map(([k,l]) => {
+          {[['planner','PLAN'],['map','MAP'],['pack','PACK'],['community','COMMUNITY']].map(([k,l]) => {
             const active = tab === k;
             return (
               <button key={k} type="button" onClick={() => setTab(k)}
@@ -1875,12 +2597,20 @@ export default function App() {
             />
           )}
           {tab === 'pack' && (
-            <PackTab checked={checked} setChecked={setChecked} packType={packType} setPackType={setPackType} />
+            <PackTab
+              checked={checked} setChecked={setChecked}
+              packType={packType} setPackType={setPackType}
+              sleepId={sleepId}
+              onGoToPlan={() => setTab('planner')}
+            />
           )}
+          {tab === 'community' && <CommunityTab />}
         </div>
       )}
 
       <PackTracker checked={checked} packType={packType} onClick={() => setTab('pack')} />
+
+      <InfoSidebar open={showSidebar} onClose={() => setShowSidebar(false)} />
 
       {showSaved && (
         <SavedDrawer
